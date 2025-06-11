@@ -572,11 +572,13 @@ static int dwc2_tx_fifo_write(const struct device *dev,
 		/* Queue transfer on next SOF. TODO: allow stack to explicitly
 		 * specify on which (micro-)frame the data should be sent.
 		 */
+#if 0
 		if (priv->sof_num & 1) {
 			diepctl |= USB_DWC2_DEPCTL_SETEVENFR;
 		} else {
 			diepctl |= USB_DWC2_DEPCTL_SETODDFR;
 		}
+#endif
 	}
 
 	/* Clear NAK and set endpoint enable */
@@ -697,6 +699,12 @@ static void dwc2_prep_rx(const struct device *dev, struct net_buf *buf,
 	} else {
 		/* Non-control endpoint, set CNAK for all transfers */
 		doepctl |= USB_DWC2_DEPCTL_CNAK;
+
+		/* Clear SNAK and EPDIS per periodic transfer interrupt guide */
+		if (dwc2_ep_is_iso(cfg)) {
+			doepctl &= ~USB_DWC2_DEPCTL_SNAK;
+			doepctl &= ~USB_DWC2_DEPCTL_EPDIS;
+		}
 	}
 
 	if (dwc2_ep_is_iso(cfg)) {
@@ -2165,7 +2173,7 @@ static int udc_dwc2_init_controller(const struct device *dev)
 	sys_write32(USB_DWC2_GINTSTS_OEPINT | USB_DWC2_GINTSTS_IEPINT |
 		    USB_DWC2_GINTSTS_ENUMDONE | USB_DWC2_GINTSTS_USBRST |
 		    USB_DWC2_GINTSTS_WKUPINT | USB_DWC2_GINTSTS_USBSUSP |
-		    USB_DWC2_GINTSTS_INCOMPISOOUT | USB_DWC2_GINTSTS_INCOMPISOIN |
+		    /* USB_DWC2_GINTSTS_INCOMPISOOUT | USB_DWC2_GINTSTS_INCOMPISOIN | */
 		    USB_DWC2_GINTSTS_SOF,
 		    (mem_addr_t)&base->gintmsk);
 
@@ -2196,6 +2204,9 @@ static int udc_dwc2_enable(const struct device *dev)
 	/* Disable soft disconnect */
 	sys_clear_bits((mem_addr_t)&base->dctl, USB_DWC2_DCTL_SFTDISCON);
 	LOG_DBG("Enable device %p", base);
+
+	/* Enable periodic transfer interval mode */
+	sys_set_bits((mem_addr_t)&base->dctl, USB_DWC2_DCTL_IGNRFRMNUM);
 
 	err = dwc2_quirk_post_enable(dev);
 	if (err) {
@@ -2602,7 +2613,7 @@ static inline void dwc2_handle_iepint(const struct device *dev)
 }
 
 static inline void dwc2_handle_out_xfercompl(const struct device *dev,
-					     const uint8_t ep_idx)
+					     const uint8_t ep_idx, const bool pktdrpsts)
 {
 	struct udc_ep_config *ep_cfg = udc_get_ep_cfg(dev, ep_idx);
 	struct udc_dwc2_data *const priv = udc_get_private(dev);
@@ -2631,6 +2642,7 @@ static inline void dwc2_handle_out_xfercompl(const struct device *dev,
 		uint32_t pkts;
 		bool valid;
 
+#if 0
 		pkts = usb_dwc2_get_doeptsizn_pktcnt(priv->rx_siz[ep_idx]) -
 			usb_dwc2_get_doeptsizn_pktcnt(doeptsiz);
 		switch (usb_dwc2_get_doeptsizn_rxdpid(doeptsiz)) {
@@ -2648,6 +2660,35 @@ static inline void dwc2_handle_out_xfercompl(const struct device *dev,
 			valid = false;
 			break;
 		}
+#else
+		const uint32_t xfersize = usb_dwc2_get_doeptsizn_xfersize(doeptsiz);
+		pkts = usb_dwc2_get_doeptsizn_pktcnt(doeptsiz);
+
+		if (pkts == 0) {
+			valid = true;
+
+			if (xfersize == 0) {
+				bcnt = xfersize;
+			}
+		} else {
+			if (pktdrpsts) {
+				LOG_WRN("Dropped ISO OUT packet");
+
+				/* Clear the drop status flag (not sure if necessary) */
+				valid = false;
+				sys_set_bits((mem_addr_t)&base->out_ep[ep_idx].doepint, USB_DWC2_DOEPINT_PKTDRPSTS);
+			} else if (xfersize != 0) {
+				/* short packet */
+				valid = true;
+			} else {
+				// Synopsys docs don't elaborate on this
+				__ASSERT_NO_MSG("ERROR");
+			}
+
+			// Recompute XFERSIZE and PKTCNT
+			dwc2_prep_rx(dev, buf, ep_cfg);
+		}
+#endif
 
 		if (!valid) {
 			if (dwc2_in_completer_mode(dev)) {
@@ -2732,7 +2773,7 @@ static inline void dwc2_handle_oepint(const struct device *dev)
 		}
 
 		if (status & USB_DWC2_DOEPINT_XFERCOMPL) {
-			dwc2_handle_out_xfercompl(dev, n);
+			dwc2_handle_out_xfercompl(dev, n, doepint & USB_DWC2_DOEPINT_PKTDRPSTS);
 		}
 
 		epint &= ~BIT(n);
