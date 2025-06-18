@@ -15,9 +15,18 @@
 #include <zephyr/usb/usbd.h>
 #include <zephyr/usb/class/usbd_uac2.h>
 #include <zephyr/drivers/i2s.h>
+#include <zephyr/linker/devicetree_regions.h>
 #include <zephyr/logging/log.h>
 
+
 LOG_MODULE_REGISTER(uac2_sample, LOG_LEVEL_INF);
+
+#define MEMORY_SECTION_NAME(node_id)                                                               \
+	COND_CODE_1(DT_NODE_HAS_PROP(node_id, memory_regions),              \
+		(LINKER_DT_NODE_REGION_NAME( \
+			DT_PHANDLE(node_id, memory_regions))),      \
+		(EMPTY))
+#define I2S_MEMORY_SECTION MEMORY_SECTION_NAME(DT_NODELABEL(i2s_rxtx))
 
 #define HEADPHONES_OUT_TERMINAL_ID UAC2_ENTITY_ID(DT_NODELABEL(out_terminal))
 #define MICROPHONE_IN_TERMINAL_ID UAC2_ENTITY_ID(DT_NODELABEL(in_terminal))
@@ -38,8 +47,8 @@ LOG_MODULE_REGISTER(uac2_sample, LOG_LEVEL_INF);
  * errors when USB host decides to perform rapid terminal enable/disable cycles.
  */
 #define I2S_BLOCKS          7
-K_MEM_SLAB_DEFINE_STATIC(i2s_tx_slab, MAX_BLOCK_SIZE, I2S_BLOCKS, 4);
-K_MEM_SLAB_DEFINE_STATIC(i2s_rx_slab, MAX_BLOCK_SIZE, I2S_BLOCKS, 4);
+K_MEM_SLAB_IN_SECTION_DEFINE_STATIC(i2s_tx_slab, I2S_MEMORY_SECTION, MAX_BLOCK_SIZE, I2S_BLOCKS, 4);
+K_MEM_SLAB_IN_SECTION_DEFINE_STATIC(i2s_rx_slab, I2S_MEMORY_SECTION, MAX_BLOCK_SIZE, I2S_BLOCKS, 4);
 
 struct usb_i2s_ctx {
 	const struct device *i2s_dev;
