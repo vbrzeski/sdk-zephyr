@@ -2673,10 +2673,9 @@ static inline void dwc2_handle_out_xfercompl(const struct device *dev,
 		} else {
 			if (pktdrpsts) {
 				LOG_WRN("Dropped ISO OUT packet");
-
-				/* Clear the drop status flag (not sure if necessary) */
 				valid = false;
-				sys_set_bits((mem_addr_t)&base->out_ep[ep_idx].doepint, USB_DWC2_DOEPINT_PKTDRPSTS);
+				/* Clear the drop status flag (not sure if necessary) */
+				//sys_set_bits((mem_addr_t)&base->out_ep[ep_idx].doepint, USB_DWC2_DOEPINT_PKTDRPSTS);
 			} else if (xfersize != 0) {
 				/* short packet */
 				valid = true;

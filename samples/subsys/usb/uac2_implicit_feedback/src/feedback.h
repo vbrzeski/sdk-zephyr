@@ -12,7 +12,7 @@
 /* Nominal number of samples received on each SOF. This sample is currently
  * supporting only 48 kHz sample rate.
  */
-#define SAMPLES_PER_SOF     48
+#define SAMPLES_PER_SOF     6 * 4
 
 struct feedback_ctx *feedback_init(void);
 void feedback_reset_ctx(struct feedback_ctx *ctx);
