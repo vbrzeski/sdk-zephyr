@@ -440,10 +440,27 @@ static void process_mic_data(const struct device *dev, struct usb_i2s_ctx *ctx)
 	}
 }
 
+static void maybe_do_evil_things(void) 
+{
+	static uint32_t evil_counter;
+
+	if (++evil_counter % 0x1000) {
+		return;
+	}
+
+	// Simulate a stalled UAC2 callback, or rouge USB Class doing something wrong
+	// You'll see a log for "Dropped ISO OUT packet" and we're HOSED!
+	k_msleep(1250);
+}
+
 static void uac2_sof(const struct device *dev, void *user_data)
 {
 	ARG_UNUSED(dev);
 	struct usb_i2s_ctx *ctx = user_data;
+
+	if (ctx->microphone_enabled && ctx->headphones_enabled) {
+		maybe_do_evil_things();
+	}
 
 	if (ctx->i2s_started) {
 		feedback_process(ctx->fb);
