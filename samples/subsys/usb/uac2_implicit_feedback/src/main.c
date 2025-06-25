@@ -444,6 +444,12 @@ static void uac2_sof(const struct device *dev, void *user_data)
 	ARG_UNUSED(dev);
 	struct usb_i2s_ctx *ctx = user_data;
 
+	static int evil_thing_counter;
+	if ((++evil_thing_counter % 1024) == 0) {
+		extern void udc_dwc2_evil_thing(void);
+		udc_dwc2_evil_thing();
+	}
+
 	if (ctx->i2s_started) {
 		feedback_process(ctx->fb);
 	}

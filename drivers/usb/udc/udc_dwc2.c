@@ -3340,3 +3340,12 @@ static const struct udc_api udc_dwc2_api = {
 			      &udc_dwc2_api);
 
 DT_INST_FOREACH_STATUS_OKAY(UDC_DWC2_DEVICE_DEFINE)
+
+void udc_dwc2_evil_thing(void)
+{
+	struct usb_dwc2_reg *const base = (struct usb_dwc2_reg *)UDC_DWC2_DT_INST_REG_ADDR(0);
+
+	sys_clear_bits(USB_DWC2_GINTSTS_SOF, (mem_addr_t)&base->gintmsk);
+	k_usleep(1250);
+	sys_set_bits(USB_DWC2_GINTSTS_SOF, (mem_addr_t)&base->gintmsk);
+}
